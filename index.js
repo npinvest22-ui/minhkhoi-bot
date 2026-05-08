@@ -2,12 +2,10 @@ const express = require(‘express’);
 const app = express();
 app.use(express.json());
 
-// ===== CẤU HÌNH =====
 const VERIFY_TOKEN = process.env.VERIFY_TOKEN || ‘minhkhoi2026’;
 const PAGE_ACCESS_TOKEN = process.env.PAGE_ACCESS_TOKEN || ‘’;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || ‘’;
 
-// ===== WEBHOOK VERIFY =====
 app.get(’/webhook’, (req, res) => {
 const mode = req.query[‘hub.mode’];
 const token = req.query[‘hub.verify_token’];
@@ -20,11 +18,9 @@ res.sendStatus(403);
 }
 });
 
-// ===== NHẬN TIN NHẮN =====
 app.post(’/webhook’, async (req, res) => {
 const body = req.body;
 if (body.object !== ‘page’) return res.sendStatus(404);
-
 res.status(200).send(‘EVENT_RECEIVED’);
 
 for (const entry of body.entry || []) {
@@ -33,28 +29,19 @@ if (!event.message || event.message.is_echo) continue;
 const senderId = event.sender.id;
 const text = event.message.text;
 if (!text) continue;
-
-```
-  try {
-    // Gửi typing indicator
-    await sendTyping(senderId);
-    
-    // Gọi Claude AI
-    const reply = await getAIReply(text);
-    
-    // Gửi reply
-    await sendMessage(senderId, reply);
-  } catch (err) {
-    console.error('Error:', err);
-    await sendMessage(senderId, 'Xin lỗi, hệ thống đang bận. Vui lòng gọi hotline để được hỗ trợ ngay.');
-  }
+console.log(’Message from ’ + senderId + ’: ’ + text);
+try {
+await sendTyping(senderId);
+const reply = await getAIReply(text);
+await sendMessage(senderId, reply);
+} catch (err) {
+console.error(‘Error:’, err.message);
+await sendMessage(senderId, ‘Xin loi, he thong dang ban. Vui long thu lai sau.’);
 }
-```
-
+}
 }
 });
 
-// ===== GỌI CLAUDE AI =====
 async function getAIReply(userMessage) {
 const res = await fetch(‘https://api.anthropic.com/v1/messages’, {
 method: ‘POST’,
@@ -66,46 +53,33 @@ headers: {
 body: JSON.stringify({
 model: ‘claude-haiku-4-5-20251001’,
 max_tokens: 500,
-system: `Bạn là trợ lý chăm sóc khách hàng của Xưởng Giặt Ủi Minh Khôi tại Đà Lạt.
+system: ‘Ban la tro ly cham soc khach hang cua Xuong Giat Ui Minh Khoi tai Da Lat. Dich vu: giat ui cong nghiep cho khach san resort homestay va giat le ca nhan. Giao nhan tan noi. Gia: 7000-14000d/kg tuy loai. Gio lam: 7h-18h hang ngay. Tra loi ngan gon than thien chuyen nghiep duoi 150 chu.’,
+messages: [{ role: ‘user’, content: userMessage }]
+})
+});
+const data = await res.json();
+if (data.error) {
+console.error(‘Claude error:’, JSON.stringify(data.error));
+return ‘Cam on ban da lien he Minh Khoi! Chung toi se phan hoi som nhat.’;
+}
+return data.content[0].text;
+}
 
-THÔNG TIN DỊCH VỤ:
-
-- Giặt ủi công nghiệp cho khách sạn, resort, homestay
-- Giặt lẻ cho khách hàng cá nhân
-- Giao nhận tận nơi tại Đà Lạt
-- Giá: 7,000 - 14,000đ/kg tùy loại (chăn ga gối, đồ thường)
-- Giờ làm việc: 7h - 18h hàng ngày
-- Địa chỉ: Đà Lạt, Lâm Đồng
-- Hotline: liên hệ qua Facebook Messenger này
-
-CÁCH TRẢ LỜI:
-
-- Thân thiện, ngắn gọn, chuyên nghiệp
-- Dưới 150 chữ mỗi tin
-- Nếu khách hỏi giá cụ thể → cho biết khoảng giá và đề nghị báo giá chính xác qua tin nhắn
-- Nếu khách muốn đặt lịch → hỏi địa chỉ và thời gian thuận tiện
-- Không bịa thông tin không có trong hướng dẫn này`,
-  messages: [{ role: ‘user’, content: userMessage }]
-  })
-  });
-  const data = await res.json();
-  return data.content?.[0]?.text || ‘Cảm ơn bạn đã liên hệ Minh Khôi! Chúng tôi sẽ phản hồi sớm nhất.’;
-  }
-
-// ===== GỬI TIN NHẮN =====
 async function sendMessage(recipientId, text) {
-await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
+const res = await fetch(‘https://graph.facebook.com/v19.0/me/messages?access_token=’ + PAGE_ACCESS_TOKEN, {
 method: ‘POST’,
 headers: { ‘Content-Type’: ‘application/json’ },
 body: JSON.stringify({
 recipient: { id: recipientId },
-message: { text }
+message: { text: text }
 })
 });
+const data = await res.json();
+if (data.error) console.error(‘Send error:’, JSON.stringify(data.error));
 }
 
 async function sendTyping(recipientId) {
-await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${PAGE_ACCESS_TOKEN}`, {
+await fetch(‘https://graph.facebook.com/v19.0/me/messages?access_token=’ + PAGE_ACCESS_TOKEN, {
 method: ‘POST’,
 headers: { ‘Content-Type’: ‘application/json’ },
 body: JSON.stringify({
@@ -115,7 +89,16 @@ sender_action: ‘typing_on’
 });
 }
 
-app.get(’/’, (req, res) => res.send(‘Minh Khoi Messenger Bot running!’));
+app.get(’/’, (req, res) => res.send(‘Minh Khoi Bot running!’));
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Bot running on port ${PORT}`));
+app.listen(PORT, () => {
+console.log(’Bot running on port ’ + PORT);
+setInterval(function() {
+fetch(‘https://minhkhoi-bot.onrender.com/’).then(function() {
+console.log(‘Keepalive ok’);
+}).catch(function(e) {
+console.log(’Keepalive fail: ’ + e.message);
+});
+}, 840000);
+});
